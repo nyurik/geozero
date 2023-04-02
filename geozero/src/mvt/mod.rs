@@ -12,6 +12,12 @@ pub use tile_value::TileValue;
 #[rustfmt::skip]
 mod vector_tile;
 
+mod tile2;
+pub use tile2::vector_tile as vector_tile2;
+
+mod tile3;
+pub use tile3::vector_tile as vector_tile3;
+
 pub use mvt_reader::*;
 pub use mvt_writer::*;
 pub use prost::Message;

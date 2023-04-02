@@ -24,6 +24,9 @@ seek_bufread = "1.2"
 sqlx = { version = "0.6", default-features = false, features = ["runtime-tokio-native-tls", "postgres", "sqlite"] }
 tokio = { version = "1.27.0", default-features = false, features = ["rt-multi-thread"] }
 
+protobuf = { version = "3.2", features = ["with-bytes"] }
+quick-protobuf = "0.8.1"
+
 [[bench]]
 name = "geobench"
 harness = false
