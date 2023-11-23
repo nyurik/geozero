@@ -4,17 +4,20 @@ use std::fmt::Display;
 use std::io::Write;
 
 /// GeoJSON writer.
-pub struct GeoJsonWriter<'a, W: Write> {
-    pub dims: CoordDimensions,
-    out: &'a mut W,
+pub struct GeoJsonWriter<W: Write> {
+    dims: CoordDimensions,
+    out: W,
 }
 
-impl<'a, W: Write> GeoJsonWriter<'a, W> {
-    pub fn new(out: &'a mut W) -> GeoJsonWriter<'a, W> {
+impl<W: Write> GeoJsonWriter<W> {
+    pub fn new(out: W) -> Self {
         GeoJsonWriter {
             dims: CoordDimensions::default(),
             out,
         }
+    }
+    pub fn with_dims(out: W, dims: CoordDimensions) -> Self {
+        GeoJsonWriter { dims, out }
     }
     fn comma(&mut self, idx: usize) -> Result<()> {
         if idx > 0 {
@@ -24,7 +27,7 @@ impl<'a, W: Write> GeoJsonWriter<'a, W> {
     }
 }
 
-impl<W: Write> FeatureProcessor for GeoJsonWriter<'_, W> {
+impl<W: Write> FeatureProcessor for GeoJsonWriter<W> {
     fn dataset_begin(&mut self, name: Option<&str>) -> Result<()> {
         self.out.write_all(
             br#"{
@@ -71,7 +74,7 @@ impl<W: Write> FeatureProcessor for GeoJsonWriter<'_, W> {
     }
 }
 
-impl<W: Write> GeomProcessor for GeoJsonWriter<'_, W> {
+impl<W: Write> GeomProcessor for GeoJsonWriter<W> {
     fn dimensions(&self) -> CoordDimensions {
         self.dims
     }
@@ -96,6 +99,12 @@ impl<W: Write> GeomProcessor for GeoJsonWriter<'_, W> {
             self.out.write_all(format!(",{z}").as_bytes())?;
         }
         self.out.write_all(b"]")?;
+        Ok(())
+    }
+    fn empty_point(&mut self, idx: usize) -> Result<()> {
+        self.comma(idx)?;
+        self.out
+            .write_all(br#"{"type": "Point", "coordinates": []}"#)?;
         Ok(())
     }
     fn point_begin(&mut self, idx: usize) -> Result<()> {
@@ -186,38 +195,38 @@ impl<W: Write> GeomProcessor for GeoJsonWriter<'_, W> {
     }
 }
 
-fn write_num_prop<W: Write>(out: &mut W, colname: &str, v: &dyn Display) -> Result<()> {
+fn write_num_prop<W: Write>(mut out: W, colname: &str, v: &dyn Display) -> Result<()> {
     let colname = colname.replace('\"', "\\\"");
     out.write_all(format!(r#""{colname}": {v}"#).as_bytes())?;
     Ok(())
 }
 
-fn write_str_prop<W: Write>(out: &mut W, colname: &str, v: &str) -> Result<()> {
+fn write_str_prop<W: Write>(mut out: W, colname: &str, v: &str) -> Result<()> {
     let colname = colname.replace('\"', "\\\"");
     let value = v.replace('\"', "\\\"");
     out.write_all(format!(r#""{colname}": "{value}""#).as_bytes())?;
     Ok(())
 }
 
-impl<W: Write> PropertyProcessor for GeoJsonWriter<'_, W> {
+impl<W: Write> PropertyProcessor for GeoJsonWriter<W> {
     fn property(&mut self, i: usize, colname: &str, colval: &ColumnValue) -> Result<bool> {
         if i > 0 {
             self.out.write_all(b", ")?;
         }
         match colval {
-            ColumnValue::Byte(v) => write_num_prop(self.out, colname, &v)?,
-            ColumnValue::UByte(v) => write_num_prop(self.out, colname, &v)?,
-            ColumnValue::Bool(v) => write_num_prop(self.out, colname, &v)?,
-            ColumnValue::Short(v) => write_num_prop(self.out, colname, &v)?,
-            ColumnValue::UShort(v) => write_num_prop(self.out, colname, &v)?,
-            ColumnValue::Int(v) => write_num_prop(self.out, colname, &v)?,
-            ColumnValue::UInt(v) => write_num_prop(self.out, colname, &v)?,
-            ColumnValue::Long(v) => write_num_prop(self.out, colname, &v)?,
-            ColumnValue::ULong(v) => write_num_prop(self.out, colname, &v)?,
-            ColumnValue::Float(v) => write_num_prop(self.out, colname, &v)?,
-            ColumnValue::Double(v) => write_num_prop(self.out, colname, &v)?,
+            ColumnValue::Byte(v) => write_num_prop(&mut self.out, colname, &v)?,
+            ColumnValue::UByte(v) => write_num_prop(&mut self.out, colname, &v)?,
+            ColumnValue::Bool(v) => write_num_prop(&mut self.out, colname, &v)?,
+            ColumnValue::Short(v) => write_num_prop(&mut self.out, colname, &v)?,
+            ColumnValue::UShort(v) => write_num_prop(&mut self.out, colname, &v)?,
+            ColumnValue::Int(v) => write_num_prop(&mut self.out, colname, &v)?,
+            ColumnValue::UInt(v) => write_num_prop(&mut self.out, colname, &v)?,
+            ColumnValue::Long(v) => write_num_prop(&mut self.out, colname, &v)?,
+            ColumnValue::ULong(v) => write_num_prop(&mut self.out, colname, &v)?,
+            ColumnValue::Float(v) => write_num_prop(&mut self.out, colname, &v)?,
+            ColumnValue::Double(v) => write_num_prop(&mut self.out, colname, &v)?,
             ColumnValue::String(v) | ColumnValue::DateTime(v) => {
-                write_str_prop(self.out, colname, v)?;
+                write_str_prop(&mut self.out, colname, v)?;
             }
             ColumnValue::Json(_v) => (),
             ColumnValue::Binary(_v) => (),
@@ -230,6 +239,7 @@ impl<W: Write> PropertyProcessor for GeoJsonWriter<'_, W> {
 mod test {
     use super::*;
     use crate::geojson::read_geojson;
+    use crate::wkt::WktStr;
     use crate::ToJson;
 
     #[test]
@@ -420,6 +430,12 @@ mod test {
             &geom.to_json().unwrap(),
             r#"{"type": "Point", "coordinates": [10,20]}"#
         );
+
+        let geom = WktStr("POINT EMPTY");
+        assert_eq!(
+            &geom.to_json().unwrap(),
+            r#"{"type": "Point", "coordinates": []}"#
+        )
     }
 
     fn assert_json_eq(a: &[u8], b: &str) {

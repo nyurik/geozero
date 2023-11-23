@@ -21,6 +21,20 @@ impl<T: FromWkb + Sized> FromSql<'_> for wkb::Decode<T> {
     }
 }
 
+impl FromSql<'_> for wkb::Ewkb {
+    fn from_sql(_ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        Ok(wkb::Ewkb(raw.to_vec()))
+    }
+
+    fn from_sql_null(_ty: &Type) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        Ok(wkb::Ewkb(Vec::new()))
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        matches!(ty.name(), "geography" | "geometry")
+    }
+}
+
 impl<T: GeozeroGeometry + Sized> ToSql for wkb::Encode<T> {
     fn to_sql(
         &self,
@@ -28,9 +42,13 @@ impl<T: GeozeroGeometry + Sized> ToSql for wkb::Encode<T> {
         out: &mut BytesMut,
     ) -> Result<IsNull, Box<dyn std::error::Error + Sync + Send>> {
         let pgout = &mut out.writer();
-        let mut writer = wkb::WkbWriter::new(pgout, wkb::WkbDialect::Ewkb);
-        writer.dims = self.0.dims();
-        writer.srid = self.0.srid();
+        let mut writer = wkb::WkbWriter::with_opts(
+            pgout,
+            wkb::WkbDialect::Ewkb,
+            self.0.dims(),
+            self.0.srid(),
+            Vec::new(),
+        );
         self.0.process_geom(&mut writer)?;
         Ok(IsNull::No)
     }
@@ -89,9 +107,13 @@ macro_rules! impl_postgres_postgis_encode {
                 use bytes::BufMut;
 
                 let pgout = &mut out.writer();
-                let mut writer = $crate::wkb::WkbWriter::new(pgout, $crate::wkb::WkbDialect::Ewkb);
-                writer.dims = self.dims();
-                writer.srid = self.srid();
+                let mut writer = $crate::wkb::WkbWriter::with_opts(
+                    pgout,
+                    $crate::wkb::WkbDialect::Ewkb,
+                    self.dims(),
+                    self.srid(),
+                    Vec::new(),
+                );
                 self.process_geom(&mut writer)?;
                 Ok(postgres_types::IsNull::No)
             }

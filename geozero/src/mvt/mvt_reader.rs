@@ -1,8 +1,11 @@
-use crate::error::{GeozeroError, Result};
+use crate::error::Result;
 use crate::mvt::vector_tile::{tile, tile::GeomType};
 use crate::{ColumnValue, FeatureProcessor, GeomProcessor, GeozeroDatasource, GeozeroGeometry};
 
-use super::mvt_commands::{Command, CommandInteger, ParameterInteger};
+use super::{
+    mvt_commands::{Command, CommandInteger, ParameterInteger},
+    mvt_error::MvtError,
+};
 
 impl GeozeroDatasource for tile::Layer {
     fn process<P: FeatureProcessor>(&mut self, processor: &mut P) -> Result<()> {
@@ -35,19 +38,16 @@ fn process_properties(
     processor.properties_begin()?;
     for (i, pair) in feature.tags.chunks(2).enumerate() {
         let [key_idx, value_idx] = pair else {
-            return Err(GeozeroError::Feature(format!(
-                "invalid feature.tags length: {:?}",
-                feature.tags.len()
-            )));
+            return Err(MvtError::InvalidFeatureTagsLength(feature.tags.len()).into());
         };
         let key = layer
             .keys
             .get(*key_idx as usize)
-            .ok_or_else(|| GeozeroError::Feature(format!("invalid key index {key_idx}")))?;
+            .ok_or(MvtError::InvalidKeyIndex(*key_idx))?;
         let value = layer
             .values
             .get(*value_idx as usize)
-            .ok_or_else(|| GeozeroError::Feature(format!("invalid value index {value_idx}")))?;
+            .ok_or(MvtError::InvalidValueIndex(*value_idx))?;
 
         if let Some(ref v) = value.string_value {
             processor.property(i, key, &ColumnValue::String(v))?;
@@ -64,9 +64,7 @@ fn process_properties(
         } else if let Some(v) = value.bool_value {
             processor.property(i, key, &ColumnValue::Bool(v))?;
         } else {
-            return Err(GeozeroError::Property(format!(
-                "unsupported value type for key {key}",
-            )));
+            return Err(MvtError::UnsupportedKeyValueType(key.to_string()).into());
         }
     }
     processor.properties_end()
@@ -155,11 +153,11 @@ fn process_linestring<P: GeomProcessor>(
     processor: &mut P,
 ) -> Result<()> {
     if geom[0] != CommandInteger::from(Command::MoveTo, 1) {
-        return Err(GeozeroError::GeometryFormat);
+        return Err(MvtError::GeometryFormat.into());
     }
     let lineto = CommandInteger(geom[3]);
     if lineto.id() != Command::LineTo as u32 {
-        return Err(GeozeroError::GeometryFormat);
+        return Err(MvtError::GeometryFormat.into());
     }
     processor.linestring_begin(tagged, 1 + lineto.count() as usize, idx)?;
     process_coord(cursor, &geom[1..3], 0, processor)?;
@@ -208,14 +206,14 @@ fn process_polygon<P: GeomProcessor>(
 
     for (i, ring) in rings.iter().enumerate() {
         if ring[0] != CommandInteger::from(Command::MoveTo, 1) {
-            return Err(GeozeroError::GeometryFormat);
+            return Err(MvtError::GeometryFormat.into());
         }
         if *ring.last().unwrap() != CommandInteger::from(Command::ClosePath, 1) {
-            return Err(GeozeroError::GeometryFormat);
+            return Err(MvtError::GeometryFormat.into());
         }
         let lineto = CommandInteger(ring[3]);
         if lineto.id() != Command::LineTo as u32 {
-            return Err(GeozeroError::GeometryFormat);
+            return Err(MvtError::GeometryFormat.into());
         }
         processor.linestring_begin(false, 1 + lineto.count() as usize, i)?;
         let mut start_cursor = *cursor;
@@ -260,7 +258,7 @@ fn process_polygons<P: GeomProcessor>(
             // add interior ring to previous polygon
             last_slice.push(slice);
         } else {
-            return Err(GeozeroError::GeometryFormat);
+            return Err(MvtError::GeometryFormat.into());
         }
         geom = rest;
     }
@@ -279,7 +277,7 @@ fn process_polygons<P: GeomProcessor>(
 // using surveyor's formula
 fn is_area_positive(mut cursor: [i32; 2], first: &[u32], rest: &[u32]) -> bool {
     let nb = 1 + rest.len() / 2;
-    let mut area = 0;
+    let mut area = 0_i64;
     let mut coords = first
         .iter()
         .chain(rest)
@@ -291,7 +289,7 @@ fn is_area_positive(mut cursor: [i32; 2], first: &[u32], rest: &[u32]) -> bool {
         let [x0, y0] = cursor;
         cursor[0] += coords.next().unwrap();
         cursor[1] += coords.next().unwrap();
-        area += x0 * cursor[1] - cursor[0] * y0;
+        area += (x0 as i64) * (cursor[1] as i64) - (y0 as i64) * (cursor[0] as i64);
     }
     area > 0
 }
@@ -494,6 +492,32 @@ mod test {
             json!({
                 "type": "MultiPolygon",
                 "coordinates": [[[[0,0],[10,0],[10,10],[0,10],[0,0]]],[[[11,11],[20,11],[20,20],[11,20],[11,11]],[[13,13],[13,17],[17,17],[17,13],[13,13]]]]
+            })
+        );
+    }
+
+    #[test]
+    fn big_number_geom() {
+        // In some cases, if the extent is large enough, the coordinate parsing threw an error
+        // This geometry is using 65536 extent
+        let mut mvt_feature = tile::Feature::default();
+        mvt_feature.set_type(GeomType::Polygon);
+        mvt_feature.geometry = [
+            9, 69752, 75236, 250, 4342, 2820, 1418, 912, 2046, 1334, 936, 600, 708, 442, 1660,
+            1020, 1158, 686, 1648, 940, 712, 396, 714, 388, 13, 30, 121, 228, 117, 222, 127, 244,
+            23, 42, 13, 28, 1215, 645, 1947, 1069, 1273, 725, 1365, 803, 933, 557, 939, 573, 2595,
+            1617, 1305, 807, 3999, 2493, 16, 25, 80, 125, 120, 189, 142, 217, 138, 219, 136, 213,
+            15,
+        ]
+        .to_vec();
+
+        let geojson = mvt_feature.to_json().unwrap();
+
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&geojson).unwrap(),
+            json!({
+                "type": "Polygon",
+                "coordinates": [[[34876,37618],[37047,39028],[37756,39484],[38779,40151],[39247,40451],[39601,40672],[40431,41182],[41010,41525],[41834,41995],[42190,42193],[42547,42387],[42540,42402],[42479,42516],[42420,42627],[42356,42749],[42344,42770],[42337,42784],[41729,42461],[40755,41926],[40118,41563],[39435,41161],[38968,40882],[38498,40595],[37200,39786],[36547,39382],[34547,38135],[34555,38122],[34595,38059],[34655,37964],[34726,37855],[34795,37745],[34863,37638],[34876,37618]]]
             })
         );
     }

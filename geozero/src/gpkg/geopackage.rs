@@ -28,6 +28,22 @@ impl<'de, T: FromWkb + Sized> Decode<'de, Sqlite> for wkb::Decode<T> {
     }
 }
 
+impl sqlx::Type<Sqlite> for wkb::GpkgWkb {
+    fn type_info() -> SqliteTypeInfo {
+        <Vec<u8> as sqlx::Type<Sqlite>>::type_info()
+    }
+}
+
+impl<'de> Decode<'de, Sqlite> for wkb::GpkgWkb {
+    fn decode(value: SqliteValueRef<'de>) -> Result<Self, BoxDynError> {
+        if value.is_null() {
+            return Ok(wkb::GpkgWkb(Vec::new()));
+        }
+        let blob = <&[u8] as Decode<Sqlite>>::decode(value)?;
+        Ok(wkb::GpkgWkb(blob.to_vec()))
+    }
+}
+
 impl<T: GeozeroGeometry + Sized> sqlx::Type<Sqlite> for wkb::Encode<T> {
     fn type_info() -> SqliteTypeInfo {
         <Vec<u8> as sqlx::Type<Sqlite>>::type_info()
@@ -37,9 +53,13 @@ impl<T: GeozeroGeometry + Sized> sqlx::Type<Sqlite> for wkb::Encode<T> {
 impl<'q, T: GeozeroGeometry + Sized> Encode<'q, Sqlite> for wkb::Encode<T> {
     fn encode_by_ref(&self, args: &mut Vec<SqliteArgumentValue<'q>>) -> IsNull {
         let mut wkb_out: Vec<u8> = Vec::new();
-        let mut writer = wkb::WkbWriter::new(&mut wkb_out, wkb::WkbDialect::Geopackage);
-        writer.dims = self.0.dims();
-        writer.srid = self.0.srid();
+        let mut writer = wkb::WkbWriter::with_opts(
+            &mut wkb_out,
+            wkb::WkbDialect::Geopackage,
+            self.0.dims(),
+            self.0.srid(),
+            Vec::new(),
+        );
         self.0
             .process_geom(&mut writer)
             .expect("Failed to encode Geometry");
@@ -103,10 +123,13 @@ macro_rules! impl_sqlx_gpkg_encode {
             ) -> sqlx::encode::IsNull {
                 use $crate::GeozeroGeometry;
                 let mut wkb_out: Vec<u8> = Vec::new();
-                let mut writer =
-                    $crate::wkb::WkbWriter::new(&mut wkb_out, $crate::wkb::WkbDialect::Geopackage);
-                writer.dims = self.dims();
-                writer.srid = self.srid();
+                let mut writer = $crate::wkb::WkbWriter::with_opts(
+                    &mut wkb_out,
+                    $crate::wkb::WkbDialect::Geopackage,
+                    self.dims(),
+                    self.srid(),
+                    Vec::new(),
+                );
                 self.process_geom(&mut writer)
                     .expect("Failed to encode Geometry");
                 args.push(sqlx::sqlite::SqliteArgumentValue::Blob(

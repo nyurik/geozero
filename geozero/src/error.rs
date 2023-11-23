@@ -32,11 +32,19 @@ pub enum GeozeroError {
     // GeometryProcessor
     #[error("accessing requested coordinate")]
     Coord,
+    #[error("invalid SRID value `{0}`")]
+    Srid(i32),
     #[error("processing geometry `{0}`")]
     Geometry(String),
     // General
-    #[error("I/O error")]
+    #[error("I/O error `{0}`")]
     IoError(#[from] std::io::Error),
+    #[cfg(feature = "with-mvt")]
+    #[error("MVT error `{0}`")]
+    MvtError(#[from] crate::mvt::MvtError),
+    #[cfg(feature = "with-gdal")]
+    #[error("GDAL error `{0}`")]
+    GdalError(#[from] crate::gdal::GdalError),
 }
 
 pub type Result<T> = std::result::Result<T, GeozeroError>;

@@ -19,14 +19,17 @@ impl GeozeroGeometry for geos::Geometry<'_> {
 
 impl From<geos::Error> for GeozeroError {
     fn from(error: geos::Error) -> Self {
+        use geos::Error::*;
         match error {
-            geos::Error::InvalidGeometry(e)
-            | geos::Error::ImpossibleOperation(e)
-            | geos::Error::GeosError(e)
-            | geos::Error::NoConstructionFromNullPtr(e)
-            | geos::Error::ConversionError(e)
-            | geos::Error::GenericError(e) => GeozeroError::Geometry(e),
-            geos::Error::GeosFunctionError(_, _) => GeozeroError::GeometryFormat,
+            InvalidGeometry(e)
+            | ImpossibleOperation(e)
+            | GeosError(e)
+            | NoConstructionFromNullPtr(e)
+            | ConversionError(e)
+            | GenericError(e)
+            | VoronoiError(e)
+            | NormalizeError(e) => GeozeroError::Geometry(e),
+            GeosFunctionError(_, _) => GeozeroError::GeometryFormat,
         }
     }
 }
@@ -212,8 +215,7 @@ mod test {
         let ggeom = GGeometry::new_from_wkt(wkt).unwrap();
 
         let mut wkt_data: Vec<u8> = Vec::new();
-        let mut writer = WktWriter::new(&mut wkt_data);
-        writer.dims.z = true;
+        let mut writer = WktWriter::with_dims(&mut wkt_data, CoordDimensions::xyz());
         assert!(process_geom(&ggeom, &mut writer).is_ok());
 
         assert_eq!(std::str::from_utf8(&wkt_data).unwrap(), wkt);

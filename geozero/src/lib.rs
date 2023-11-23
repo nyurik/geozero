@@ -17,34 +17,34 @@
 //!
 //! ## Format conversion overview
 //!
-//! |           |                         [`GeozeroGeometry`]                          | Dimensions |                        [`GeozeroDatasource`]                         | Geometry Conversion |            [`GeomProcessor`]            |
-//! |-----------|----------------------------------------------------------------------|------------|----------------------------------------------------------------------|---------------------|-----------------------------------------|
-//! | CSV       | [csv::Csv], [csv::CsvString]                                         | XY         | -                                                                    | [ProcessToCsv]      | [CsvWriter](csv::CsvWriter)             |
-//! | geo-types | `geo_types::Geometry<f64>`                                           | XY         | -                                                                    | [ToGeo]             | [GeoWriter](geo_types::GeoWriter)       |
-//! | GeoArrow  | `arrow2::array::BinaryArray`                                         | XY         | -                                                                    | -                   | -                                       |
-//! | GeoJSON   | [GeoJson](geojson::GeoJson), [GeoJsonString](geojson::GeoJsonString) | XYZ        | [GeoJsonReader](geojson::GeoJsonReader), [GeoJson](geojson::GeoJson) | [ToJson]            | [GeoJsonWriter](geojson::GeoJsonWriter) |
-//! | GDAL      | `gdal::vector::Geometry`                                             | XYZ        | -                                                                    | [ToGdal]            | [GdalWriter](gdal::GdalWriter)          |
-//! | GEOS      | `geos::Geometry`                                                     | XYZ        | -                                                                    | [ToGeos]            | [GeosWriter](geos::GeosWriter)          |
-//! | GPX       |                                                                      | XY         | [GpxReader](gpx::GpxReader)                                          |                     |                                         |
-//! | MVT       | [mvt::tile::Feature]                                                 | XY         | [mvt::tile::Layer]                                                   | [ToMvt]             | [MvtWriter](mvt::MvtWriter)             |
-//! | SVG       | -                                                                    | XY         | -                                                                    | [ToSvg]             | [SvgWriter](svg::SvgWriter)             |
-//! | WKB       | [Wkb](wkb::Wkb), [Ewkb](wkb::Ewkb), [GpkgWkb](wkb::GpkgWkb)          | XYZM       | -                                                                    | [ToWkb]             | [WkbWriter](wkb::WkbWriter)             |
-//! | WKT       | [wkt::WktStr], [wkt::WktString]                                      | XYZM       | [wkt::WktReader], [wkt::WktStr], [wkt::WktString]                    | [ToWkt]             | [WktWriter](wkt::WktWriter)             |
+//! |           |                         [`GeozeroGeometry`]                                                                              | Dimensions |                        [`GeozeroDatasource`]                                         | Geometry Conversion |            [`GeomProcessor`]            |
+//! |-----------|--------------------------------------------------------------------------------------------------------------------------|------------|--------------------------------------------------------------------------------------|---------------------|-----------------------------------------|
+//! | CSV       | [csv::Csv], [csv::CsvString]                                                                                             | XY         | -                                                                                    | [ProcessToCsv]      | [CsvWriter](csv::CsvWriter)             |
+//! | GDAL      | `gdal::vector::Geometry`                                                                                                 | XYZ        | -                                                                                    | [ToGdal]            | [GdalWriter](gdal::GdalWriter)          |
+//! | geo-types | `geo_types::Geometry<f64>`                                                                                               | XY         | -                                                                                    | [ToGeo]             | [GeoWriter](geo_types::GeoWriter)       |
+//! | GeoArrow  | `arrow2::array::BinaryArray`                                                                                             | XY         | -                                                                                    | -                   | -                                       |
+//! | GeoJSON   | [GeoJson](geojson::GeoJson), [GeoJsonString](geojson::GeoJsonString)                                                     | XYZ        | [GeoJsonReader](geojson::GeoJsonReader), [GeoJson](geojson::GeoJson)                 | [ToJson]            | [GeoJsonWriter](geojson::GeoJsonWriter) |
+//! | GEOS      | `geos::Geometry`                                                                                                         | XYZ        | -                                                                                    | [ToGeos]            | [GeosWriter](geos::GeosWriter)          |
+//! | GPX       |                                                                                                                          | XY         | [GpxReader](gpx::GpxReader)                                                          |                     |                                         |
+//! | MVT       | [mvt::tile::Feature]                                                                                                     | XY         | [mvt::tile::Layer]                                                                   | [ToMvt]             | [MvtWriter](mvt::MvtWriter)             |
+//! | SVG       | -                                                                                                                        | XY         | -                                                                                    | [ToSvg]             | [SvgWriter](svg::SvgWriter)             |
+//! | WKB       | [Wkb](wkb::Wkb), [Ewkb](wkb::Ewkb), [GpkgWkb](wkb::GpkgWkb), [SpatiaLiteWkb](wkb::SpatiaLiteWkb), [MySQL](wkb::MySQLWkb) | XYZM       | -                                                                                    | [ToWkb]             | [WkbWriter](wkb::WkbWriter)             |
+//! | WKT       | [wkt::WktStr], [wkt::WktString], [wkt::EwktStr], [wkt::EwktString]                                                       | XYZM       | [wkt::WktReader], [wkt::WktStr], [wkt::WktString], [wkt::EwktStr], [wkt::EwktString] | [ToWkt]             | [WktWriter](wkt::WktWriter)             |
 
 #![warn(clippy::uninlined_format_args)]
 #![allow(
-    clippy::many_single_char_names,
-    clippy::similar_names,
-    clippy::doc_markdown,
-    clippy::missing_errors_doc,
-    clippy::struct_excessive_bools,
-    clippy::must_use_candidate,
-    clippy::cast_sign_loss,
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
-    clippy::redundant_closure_for_method_calls,
+    clippy::cast_sign_loss,
+    clippy::doc_markdown,
+    clippy::many_single_char_names,
+    clippy::missing_errors_doc,
     clippy::missing_panics_doc,
-    clippy::module_name_repetitions
+    clippy::module_name_repetitions,
+    clippy::must_use_candidate,
+    clippy::redundant_closure_for_method_calls,
+    clippy::similar_names,
+    clippy::struct_excessive_bools
 )]
 
 mod api;
@@ -95,9 +95,9 @@ pub mod gpkg;
 pub mod gpx;
 
 #[cfg(any(
+    feature = "with-postgis-diesel",
     feature = "with-postgis-postgres",
     feature = "with-postgis-sqlx",
-    feature = "with-postgis-diesel"
 ))]
 pub mod postgis;
 
@@ -129,8 +129,8 @@ pub use crate::mvt::conversion::*;
 pub struct ProcessorSink;
 
 impl ProcessorSink {
-    pub fn new() -> ProcessorSink {
-        Self::default()
+    pub fn new() -> Self {
+        Self
     }
 }
 

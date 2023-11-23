@@ -41,9 +41,9 @@ impl GeozeroDatasource for GeoJson<'_> {
 }
 
 /// GeoJSON Reader.
-pub struct GeoJsonReader<'a, R: Read>(pub &'a mut R);
+pub struct GeoJsonReader<R: Read>(pub R);
 
-impl<'a, R: Read> GeozeroDatasource for GeoJsonReader<'a, R> {
+impl<R: Read> GeozeroDatasource for GeoJsonReader<R> {
     fn process<P: FeatureProcessor>(&mut self, processor: &mut P) -> Result<()> {
         read_geojson(&mut self.0, processor)
     }
@@ -153,7 +153,7 @@ fn process_geojson_geom<P: GeomProcessor>(gj: &GeoGeoJson, processor: &mut P) ->
 }
 
 /// Process GeoJSON geometries
-fn process_geojson_geom_n<P: GeomProcessor>(
+pub(crate) fn process_geojson_geom_n<P: GeomProcessor>(
     geom: &Geometry,
     idx: usize,
     processor: &mut P,
@@ -199,7 +199,7 @@ fn process_geojson_geom_n<P: GeomProcessor>(
 }
 
 /// Process GeoJSON properties
-fn process_properties<P: PropertyProcessor>(
+pub(crate) fn process_properties<P: PropertyProcessor>(
     properties: &Map<String, JsonValue>,
     processor: &mut P,
 ) -> Result<()> {
@@ -282,7 +282,7 @@ mod test {
     use super::*;
     use crate::geojson::GeoJsonWriter;
     use crate::wkt::WktWriter;
-    use crate::{ProcessToSvg, ToJson, ToWkt};
+    use crate::{CoordDimensions, ProcessToSvg, ToJson, ToWkt};
     use std::fs::File;
 
     #[test]
@@ -306,16 +306,14 @@ mod test {
     fn geometries3d() -> Result<()> {
         let geojson = r#"{"type": "LineString", "coordinates": [[1,1,10],[2,2,20]]}"#;
         let mut wkt_data: Vec<u8> = Vec::new();
-        let mut out = WktWriter::new(&mut wkt_data);
-        out.dims.z = true;
+        let mut out = WktWriter::with_dims(&mut wkt_data, CoordDimensions::xyz());
         assert!(read_geojson_geom(&mut geojson.as_bytes(), &mut out).is_ok());
         let wkt = std::str::from_utf8(&wkt_data).unwrap();
         assert_eq!(wkt, "LINESTRING(1 1 10,2 2 20)");
 
         let geojson = r#"{"type": "LineString", "coordinates": [[1,1],[2,2]]}"#;
         let mut wkt_data: Vec<u8> = Vec::new();
-        let mut out = WktWriter::new(&mut wkt_data);
-        out.dims.z = true;
+        let mut out = WktWriter::with_dims(&mut wkt_data, CoordDimensions::xyz());
         assert!(read_geojson_geom(&mut geojson.as_bytes(), &mut out).is_ok());
         let wkt = std::str::from_utf8(&wkt_data).unwrap();
         assert_eq!(wkt, "LINESTRING(1 1,2 2)");

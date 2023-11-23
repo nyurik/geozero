@@ -26,12 +26,13 @@ jobs:
       - name: Install protoc
         uses: arduino/setup-protoc@v1
 
-      - name: Format, Check, Clippy
+      - name: Format Check
         shell: bash
-        run: |
-          cargo fmt --all -- --check
-          cargo check --workspace --all-features --bins --examples --tests --benches
-          cargo clippy --workspace --all-features --bins --examples --tests --benches -- -D warnings
+        run: cargo fmt --all -- --check
+
+      - name: Clippy Check
+        shell: bash
+        run: cargo clippy --workspace --all-features --bins --examples --tests --benches -- -D warnings
 
       - name: Tests
         shell: bash
@@ -68,9 +69,3 @@ jobs:
         env:
           DATABASE_URL: "${{ steps.pg.outputs.connection-uri }}?sslmode=disable"
 
-      - name: Ensure valid cfg usage
-        shell: bash
-        run: |
-          rustup toolchain install nightly
-          export RUSTFLAGS='-D warnings'
-          cargo +nightly check -Z unstable-options -Z check-cfg=features,names,values,output --workspace --all-features

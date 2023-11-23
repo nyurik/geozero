@@ -1,11 +1,13 @@
 use crate::error::{GeozeroError, Result};
+use crate::gdal::gdal_error::GdalError;
 use crate::{CoordDimensions, FeatureProcessor, GeomProcessor, PropertyProcessor};
+
 use gdal::vector::Geometry;
 use gdal_sys::OGRwkbGeometryType;
 
 /// Generator for GDAL geometry type.
 pub struct GdalWriter {
-    pub dims: CoordDimensions,
+    dims: CoordDimensions,
     pub(crate) geom: Geometry,
     // current line/ring of geom (non-owned)
     line: Geometry,
@@ -14,6 +16,12 @@ pub struct GdalWriter {
 impl GdalWriter {
     pub fn new() -> Self {
         Self::default()
+    }
+    pub fn with_dims(dims: CoordDimensions) -> Self {
+        GdalWriter {
+            dims,
+            ..Self::default()
+        }
     }
     pub fn geometry(&self) -> &Geometry {
         &self.geom
@@ -73,10 +81,8 @@ impl GeomProcessor for GdalWriter {
                 self.line.set_point_2d(idx, (x, y));
             }
             _ => {
-                return Err(GeozeroError::Geometry(format!(
-                    "Unsupported geometry type {}",
-                    self.geom.geometry_type()
-                )))
+                let unsupported_type = self.geom.geometry_type();
+                return Err(GdalError::UnsupportedGeometryType(unsupported_type))?;
             }
         }
         Ok(())
@@ -107,10 +113,8 @@ impl GeomProcessor for GdalWriter {
                 self.line.set_point(idx, (x, y, z));
             }
             _ => {
-                return Err(GeozeroError::Geometry(format!(
-                    "Unsupported geometry type {}",
-                    self.geom.geometry_type()
-                )))
+                let unsupported_type = self.geom.geometry_type();
+                return Err(GdalError::UnsupportedGeometryType(unsupported_type))?;
             }
         }
         Ok(())
@@ -151,11 +155,8 @@ impl GeomProcessor for GdalWriter {
                     let n = poly.geometry_count();
                     self.line = unsafe { poly.get_unowned_geometry(n - 1) };
                 }
-                _ => {
-                    return Err(GeozeroError::Geometry(format!(
-                        "Unsupported geometry type {}",
-                        self.geom.geometry_type()
-                    )))
+                unsupported_type => {
+                    return Err(GdalError::UnsupportedGeometryType(unsupported_type))?;
                 }
             };
         }
